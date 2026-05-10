@@ -1,0 +1,538 @@
+{
+  "name": "My workflow 3",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "={{ $json.headers[\"x-job-link\"] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -32,
+        -160
+      ],
+      "id": "c59b0dbc-a688-40c2-811e-bccd73129ed8",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nconst html = $json.data || \"\";\n\n// Remove HTML tags\nconst text = html\n  .replace(/<[^>]*>/g, \" \")\n  .replace(/\\s+/g, \" \");\n\n// Extract main job description\nconst match = text.match(/Job Summary:(.*?)Similar jobs/i);\n\nconst cleaned = match\n  ? match[1].trim()\n  : text.substring(0, 3000);\n\nreturn [\n  {\n    cleaned_html: cleaned\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        -160
+      ],
+      "id": "cb19d886-e5bc-499e-8ac7-4199af33418a",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {
+          "keepSource": "json"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        64,
+        -352
+      ],
+      "id": "863569c1-0d52-43f9-a985-17d25caf4b6a",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a job description parser.\n\nExtract structured information from the job posting HTML and return ONLY valid JSON.\n\nFields to extract:\n- job_title (string or null)\n- company_name (string or null)\n- required_skills (array of strings)\n- responsibilities (array of strings)\n- experience_required (string or null)\n- location (string or null)\n\nRules:\n1. Return ONLY JSON. No explanations, no markdown, no extra text.\n2. If a value is not clearly found, return null.\n3. required_skills and responsibilities must always be arrays (empty array if nothing found).\n4. Keep values short and clean. Do not copy large paragraphs.\n5. Extract only meaningful skills (e.g., \"Java\", \"Spring Boot\", \"Docker\"), not generic words.\n\nExample output:\n{\n  \"job_title\": \"Frontend Developer\",\n  \"company_name\": \"PayPal\",\n  \"required_skills\": [\"JavaScript\", \"React\", \"HTML\", \"CSS\"],\n  \"responsibilities\": [\n    \"Build user interfaces\",\n    \"Collaborate with backend teams\",\n    \"Optimize performance\"\n  ],\n  \"experience_required\": \"2+ years\",\n  \"location\": \"Chennai, India\"\n}\n\nJob HTML:\n{{ $json.cleaned_html }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        320,
+        -160
+      ],
+      "id": "fb92cffb-1b22-4220-9177-78474002f9e7",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        320,
+        112
+      ],
+      "id": "27f69cf7-4acf-4ebe-9a02-fec78d393d65",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "TbQrwhzNG9n70sqT",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"job_title\": \"Frontend Engineer\",\n  \"required_skills\": [\"HTML\", \"CSS\", \"React\"],\n  \"company_name\" : \"IDFC First Bank\",\n  \"responsibilities\": [\n    \"Engage with the development team to identify technical roadblocks and recommend solutions\",\n    \"Help shape the technology stack and architecture of new features and applications\",\n    \"Identify, analyze and develop interfaces and integration flows\",\n    \"Develop software modules, review code, gather requirements, fix bugs, test and document implementations\",\n    \"Develop and deploy native code for customer-facing platforms\",\n    \"Explain complex technical issues to stakeholders and recommend solutions\",\n    \"Design system specifications, standards and programming solutions\",\n    \"Troubleshoot issues and provide bug fixes\",\n    \"Provide status updates and reporting metrics to leadership\",\n    \"Mentor junior developers and support skill development\",\n    \"Ensure efficient and effective delivery of business requirements\"\n  ],\n  \"location\": \"Chennai, India\",\n  \"experience_required\": {\n    \"type\": [\"string\", \"null\"]\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        464,
+        112
+      ],
+      "id": "d914e634-8cd2-48da-87e7-687ee07e2e74",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        320,
+        -336
+      ],
+      "id": "15956a2f-f135-4a96-8f58-07895a37b63a",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an ATS resume optimizer.\n\nCompare the job requirements with the candidate's resume and provide structured optimization.\n\nJob Description:\nRequired Skills : {{ $json.output.required_skills }}\n\nResponsibilities : {{ $json.output.responsibilities}}\n\nExperience Required : {{ $json.output.experience_required }}\n\nCandidate Resume:\n{{ $json.text }}\n\nReturn ONLY valid JSON in this exact format:\n{\n\"skill_gaps\": [\"skill1\", \"skill2\"],\n\"resume_improvements\": [\"improvement1\", \"improvement2\"],\n\"optimized_resume\": \"full optimized resume text here\",\n\"match_score\": 85\n}\n\nDo NOT add any markdown formatting or extra text.",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        576,
+        -336
+      ],
+      "id": "867db88d-d886-4aa9-b2bb-e38f45647e0d",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        624,
+        -112
+      ],
+      "id": "93667f2d-8732-4ea9-8c54-72e8ad51c77d",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "TbQrwhzNG9n70sqT",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"skill_gab\":[\"string\"],\n  \"resume_improvements\":[\"string\"],\n  \"optimized_resume\":\"string\",\n  \"match_score\":0\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        752,
+        -112
+      ],
+      "id": "67dd9815-0aed-4998-b5cc-925cb40811b0",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Write a professional cover letter in plain text format (no JSON).\n\nCandidate Name:{{ $('Webhook').item.json.headers['x-name'] }}\nEmail:{{ $('Webhook').item.json.headers['x-email'] }}\nJob Role:{{ $('AI Agent').item.json.output.job_title }}\nTarget Company:{{ $('AI Agent').item.json.output.company_name }}\n\nJob Description:{{ $('AI Agent').item.json.output }}\n\nResume Analysis:{{ $json.output }}\n\nWrite a compelling, personalized cover letter that:\n\nHighlights relevant skills from the resume\n\nAddresses the specific job requirements\n\nShows enthusiasm for the role\n\nIs concise (200-300 words)\n\nUses professional tone\n\nReturn ONLY the cover letter text, no JSON wrapper. ",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        864,
+        -336
+      ],
+      "id": "b524e408-0f90-459d-9df2-83702dffc74a",
+      "name": "AI Agent2"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1fOHkTKKFZtR0kKemcPOMVeAXPyCt0ryn3xRNCDL48_c",
+          "mode": "list",
+          "cachedResultName": "Ai job helper",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fOHkTKKFZtR0kKemcPOMVeAXPyCt0ryn3xRNCDL48_c/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fOHkTKKFZtR0kKemcPOMVeAXPyCt0ryn3xRNCDL48_c/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $('Webhook').item.json.headers['x-name'] }}",
+            "Email": "={{ $('Webhook').item.json.headers['x-email'] }}",
+            "Company": "={{ $('AI Agent').item.json.output.company_name }}",
+            "Job title": "={{ $('AI Agent').item.json.output.job_title }}",
+            "Match score": "={{ $('AI Agent1').item.json.output.match_score }}",
+            "skill gaps": "={{ $('AI Agent1').item.json.output.skill_gab }}",
+            "resume improvements": "={{ $('AI Agent1').item.json.output.resume_improvements }}",
+            "cover letter": "=",
+            "Date": "={{ $today }}"
+          },
+          "matchingColumns": [
+            "Email"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job title",
+              "displayName": "Job title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Match score",
+              "displayName": "Match score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "skill gaps",
+              "displayName": "skill gaps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "resume improvements",
+              "displayName": "resume improvements",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cover letter",
+              "displayName": "cover letter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1152,
+        -336
+      ],
+      "id": "77e05852-30fc-427d-9e78-46d8d5a1431a",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lz05glpfD7G7nXsS",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Webhook').item.json.headers['x-email'] }}",
+        "subject": "=Your Ai Job Match Report -  {{ $('AI Agent').item.json.output.job_title || \"Job Application\" }}",
+        "message": "=<div style=\"font-family: Arial, Helvetica, sans-serif; max-width: 700px; margin: auto; line-height: 1.6; color: #222;\">   <h2 style=\"margin-bottom: 5px;\">AI Job Match Report</h2>   <p style=\"color:#555; margin-top:0;\">     Hi {{ $('Webhook').item.json.headers['x-name'] }},   </p>   <hr style=\"border:none;border-top:1px solid #eee;margin:20px 0;\">   <h3>Job Details</h3>   <p><strong>Job Title:</strong> {{ $('AI Agent').item.json.output.job_title }}</p>   <p><strong>Company:</strong> </p> {{ $('AI Agent').item.json.output.company_name }}  <p><strong>Match Score:</strong>      <span style=\"font-size:18px; font-weight:bold; color:#2c7be5;\">       {{ $('AI Agent1').item.json.output.match_score }}%     </span>   </p>   <hr style=\"border:none;border-top:1px solid #eee;margin:20px 0;\">   <h3>Skill Gaps</h3>   <ul>    {{ $('AI Agent1').item.json.output.skill_gab }}    </ul>   <h3>Resume Improvements</h3>   <ul>    {{ $('AI Agent1').item.json.output.resume_improvements }}    </ul>   <hr style=\"border:none;border-top:1px solid #eee;margin:20px 0;\">   <h3>Generated Cover Letter</h3>   <div style=\"background:#f8f9fb;padding:15px; border-radius:8px;white-space:pre-line;\">    {{ $('AI Agent2').item.json.output }}   </div>   <hr style=\"border:none;border-top:1px solid #eee;margin:25px 0;\">   <p style=\"font-size:13px;color:#666;\">     This report was generated automatically by your AI Job Assistant.   </p> </div>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1328,
+        -336
+      ],
+      "id": "e2e46e22-a91b-4bc9-b5e1-d8d6a651fc3a",
+      "name": "Send a message",
+      "webhookId": "260f7205-d8f7-4d25-8569-1262c07fc212",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "QQfUSRzlCXriE4Uo",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "89f8e393-6c99-4c1b-a68b-d98c639c9a0a",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -288,
+        -208
+      ],
+      "id": "4a20ded6-ce63-47de-9307-2790d8595b35",
+      "name": "Webhook",
+      "webhookId": "89f8e393-6c99-4c1b-a68b-d98c639c9a0a"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        864,
+        16
+      ],
+      "id": "d8648acb-a5cf-4190-81ea-cfb6c3a52bf7",
+      "name": "Google Gemini Chat Model2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "TbQrwhzNG9n70sqT",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        []
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent2": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append or update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f707f601-7339-4fae-85aa-c597c7bc2722",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e09c64f6bbfa47f3debe8803396d856c26f896a11bfd510bea640502aeb28d66"
+  },
+  "id": "W8iQpwoF6bEwBlFD",
+  "tags": []
+}
